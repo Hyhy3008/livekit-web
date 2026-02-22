@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>LiveKit Viewer</title>
+  <title>LiveKit Cloud Viewer</title>
   <style>
     body { font-family: system-ui; margin:0; padding:16px; background:#0b0f19; color:#e8eefc; }
     .wrap { max-width: 980px; margin: 0 auto; }
@@ -12,7 +12,8 @@
     button { background:#2563eb; border:none; cursor:pointer; }
     button:hover { background:#1d4ed8; }
     video { width:100%; max-width:900px; background:#111827; border-radius:12px; border:1px solid #263248; }
-    pre { white-space:pre-wrap; background:#0f172a; border:1px solid #334155; padding:10px; border-radius:12px; min-height:140px; }
+    pre { white-space:pre-wrap; background:#0f172a; border:1px solid #334155; padding:10px; border-radius:12px; min-height:170px; }
+    .hint { opacity:0.8; font-size:13px; margin-top:8px; }
   </style>
 </head>
 <body>
@@ -34,16 +35,26 @@
   </div>
 
   <pre id="log"></pre>
+  <div class="hint">Nếu lỗi, mở F12 → Console để xem log.</div>
 </div>
 
-<script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
-<script>
-window.addEventListener("DOMContentLoaded", () => {
-  let room;
+<!-- IMPORTANT:
+     Use ESM module import. This avoids the "LiveKitClient is not defined" issue. -->
+<script type="module">
+  // Prefer unpkg; if blocked, use jsdelivr (comment/uncomment accordingly)
+  import { Room, RoomEvent } from "https://unpkg.com/livekit-client/dist/livekit-client.esm.mjs";
+  // import { Room, RoomEvent } from "https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.esm.mjs";
+
+  let room = null;
+
   const logEl = document.getElementById("log");
   const v = document.getElementById("v");
   const a = document.getElementById("a");
-  const log = (s) => { logEl.textContent += s + "\n"; logEl.scrollTop = logEl.scrollHeight; };
+
+  function log(s) {
+    logEl.textContent += s + "\n";
+    logEl.scrollTop = logEl.scrollHeight;
+  }
 
   document.getElementById("connect").onclick = async () => {
     const roomName = document.getElementById("room").value.trim();
@@ -52,19 +63,33 @@ window.addEventListener("DOMContentLoaded", () => {
     try {
       log("Requesting token...");
       const r = await fetch(`/token?identity=${encodeURIComponent(identity)}&room=${encodeURIComponent(roomName)}`);
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error(`Token error ${r.status}: ${t.slice(0, 200)}`);
+      }
       const { token, url } = await r.json();
 
-      room = new LiveKitClient.Room({ adaptiveStream: true, dynacast: true });
+      room = new Room({ adaptiveStream: true, dynacast: true });
 
-      room.on(LiveKitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
+      room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
         log(`TrackSubscribed from ${participant.identity}: kind=${track.kind}`);
-        if (track.kind === "video") { track.attach(v); v.play().catch(()=>{}); }
-        if (track.kind === "audio") { track.attach(a); a.play().catch(()=>{}); }
+        if (track.kind === "video") {
+          track.attach(v);
+          v.play().catch(() => {});
+        }
+        if (track.kind === "audio") {
+          track.attach(a);
+          a.play().catch(() => {});
+        }
       });
 
-      room.on(LiveKitClient.RoomEvent.DataReceived, (payload, participant) => {
+      room.on(RoomEvent.DataReceived, (payload, participant) => {
         const text = new TextDecoder().decode(payload);
         log(`DATA from ${participant?.identity}: ${text}`);
+      });
+
+      room.on(RoomEvent.Disconnected, () => {
+        log("Disconnected.");
       });
 
       await room.connect(url, token);
@@ -79,11 +104,16 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!room) return log("Not connected");
     const text = document.getElementById("chat").value.trim();
     if (!text) return;
-    const msg = JSON.stringify({type:"chat", text});
-    await room.localParticipant.publishData(new TextEncoder().encode(msg), {reliable:true});
-    log("Sent chat: " + text);
+
+    try {
+      const msg = JSON.stringify({ type: "chat", text });
+      await room.localParticipant.publishData(new TextEncoder().encode(msg), { reliable: true });
+      log("Sent chat: " + text);
+    } catch (e) {
+      log("❌ SEND ERROR: " + (e?.message || e));
+      console.error(e);
+    }
   };
-});
 </script>
 </body>
 </html>
