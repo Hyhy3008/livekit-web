@@ -1,46 +1,89 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>LiveKit Viewer</title>
+  <style>
+    body { font-family: system-ui; margin:0; padding:16px; background:#0b0f19; color:#e8eefc; }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; margin:10px 0; align-items:center; }
+    input, button { padding:10px 12px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#e8eefc; }
+    button { background:#2563eb; border:none; cursor:pointer; }
+    button:hover { background:#1d4ed8; }
+    video { width:100%; max-width:900px; background:#111827; border-radius:12px; border:1px solid #263248; }
+    pre { white-space:pre-wrap; background:#0f172a; border:1px solid #334155; padding:10px; border-radius:12px; min-height:140px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h2>LiveKit Cloud Viewer</h2>
+
+  <video id="v" autoplay playsinline muted></video>
+  <audio id="a" autoplay></audio>
+
+  <div class="row">
+    <input id="room" value="testroom" placeholder="room name"/>
+    <input id="id" value="viewer-1" placeholder="identity"/>
+    <button id="connect">Connect</button>
+  </div>
+
+  <div class="row">
+    <input id="chat" placeholder="nhập chat..." style="flex:1; min-width:260px"/>
+    <button id="send">Send chat</button>
+  </div>
+
+  <pre id="log"></pre>
+</div>
+
 <script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
 <script>
-let room;
-const logEl = document.getElementById("log");
-const v = document.getElementById("v");
-const a = document.getElementById("a");
-function log(s){ logEl.textContent += s + "\n"; logEl.scrollTop = logEl.scrollHeight; }
+window.addEventListener("DOMContentLoaded", () => {
+  let room;
+  const logEl = document.getElementById("log");
+  const v = document.getElementById("v");
+  const a = document.getElementById("a");
+  const log = (s) => { logEl.textContent += s + "\n"; logEl.scrollTop = logEl.scrollHeight; };
 
-document.getElementById("connect").onclick = async () => {
-  const roomName = document.getElementById("room").value.trim();
-  const identity = document.getElementById("id").value.trim();
+  document.getElementById("connect").onclick = async () => {
+    const roomName = document.getElementById("room").value.trim();
+    const identity = document.getElementById("id").value.trim();
 
-  try {
-    const r = await fetch(`/token?identity=${encodeURIComponent(identity)}&room=${encodeURIComponent(roomName)}`);
-    const { token, url } = await r.json();
+    try {
+      log("Requesting token...");
+      const r = await fetch(`/token?identity=${encodeURIComponent(identity)}&room=${encodeURIComponent(roomName)}`);
+      const { token, url } = await r.json();
 
-    room = new LiveKitClient.Room({ adaptiveStream: true, dynacast: true });
+      room = new LiveKitClient.Room({ adaptiveStream: true, dynacast: true });
 
-    room.on(LiveKitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
-      log(`TrackSubscribed from ${participant.identity}: kind=${track.kind}`);
-      if (track.kind === "video") { track.attach(v); v.play().catch(()=>{}); }
-      if (track.kind === "audio") { track.attach(a); a.play().catch(()=>{}); }
-    });
+      room.on(LiveKitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
+        log(`TrackSubscribed from ${participant.identity}: kind=${track.kind}`);
+        if (track.kind === "video") { track.attach(v); v.play().catch(()=>{}); }
+        if (track.kind === "audio") { track.attach(a); a.play().catch(()=>{}); }
+      });
 
-    room.on(LiveKitClient.RoomEvent.DataReceived, (payload, participant) => {
-      const text = new TextDecoder().decode(payload);
-      log(`DATA from ${participant?.identity}: ${text}`);
-    });
+      room.on(LiveKitClient.RoomEvent.DataReceived, (payload, participant) => {
+        const text = new TextDecoder().decode(payload);
+        log(`DATA from ${participant?.identity}: ${text}`);
+      });
 
-    await room.connect(url, token);
-    log("Connected OK.");
-  } catch (e) {
-    log("CONNECT ERROR: " + (e?.message || e));
-    console.error(e);
-  }
-};
+      await room.connect(url, token);
+      log("✅ Connected OK.");
+    } catch (e) {
+      log("❌ CONNECT ERROR: " + (e?.message || e));
+      console.error(e);
+    }
+  };
 
-document.getElementById("send").onclick = async () => {
-  if (!room) return log("Not connected");
-  const text = document.getElementById("chat").value.trim();
-  if (!text) return;
-  const msg = JSON.stringify({type:"chat", text});
-  await room.localParticipant.publishData(new TextEncoder().encode(msg), {reliable:true});
-  log("Sent chat: " + text);
-};
+  document.getElementById("send").onclick = async () => {
+    if (!room) return log("Not connected");
+    const text = document.getElementById("chat").value.trim();
+    if (!text) return;
+    const msg = JSON.stringify({type:"chat", text});
+    await room.localParticipant.publishData(new TextEncoder().encode(msg), {reliable:true});
+    log("Sent chat: " + text);
+  };
+});
 </script>
+</body>
+</html>
