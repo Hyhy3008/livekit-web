@@ -4,9 +4,9 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from livekit import api
 
-LIVEKIT_URL = os.environ["wss://nhat-1q4pr3ug.livekit.cloud"]              # wss://xxx.livekit.cloud
-LIVEKIT_API_KEY = os.environ["APIQfwx8PQ7Dw3s"]
-LIVEKIT_API_SECRET = os.environ["9DfjEAZHApIfkL2bnhw9OisophZikbKonaVvbXkaA9x"]
+LIVEKIT_URL = os.environ["LIVEKIT_URL"]
+LIVEKIT_API_KEY = os.environ["LIVEKIT_API_KEY"]
+LIVEKIT_API_SECRET = os.environ["LIVEKIT_API_SECRET"]
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -29,4 +29,5 @@ async def token(identity: str, room: str):
         .with_name(identity)
 
     at.with_grants(api.VideoGrants(room_join=True, room=room))
+
     return {"token": at.to_jwt(), "url": LIVEKIT_URL}
