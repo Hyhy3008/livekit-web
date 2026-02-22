@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>LiveKit Viewer</title>
+  <style>
+    body { font-family: system-ui; background:#0b0f19; color:#e8eefc; margin:0; padding:16px; }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    video { width: 100%; max-width: 900px; background:#111827; border-radius:12px; border:1px solid #263248; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; margin:10px 0; align-items:center; }
+    input, button { padding:10px 12px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#e8eefc; }
+    button { background:#2563eb; border:none; cursor:pointer; }
+    button:hover { background:#1d4ed8; }
+    .log { white-space:pre-wrap; background:#0f172a; border:1px solid #334155; padding:10px; border-radius:12px; min-height:140px; }
+    .tag { opacity:0.8; font-size: 13px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h2>LiveKit Cloud Viewer</h2>
+  <div class="tag">LIVEKIT_URL (server): {{ livekit_url }}</div>
+
+  <video id="v" autoplay playsinline></video>
+  <audio id="a" autoplay></audio>
+
+  <div class="row">
+    <input id="room" value="testroom" placeholder="room name"/>
+    <input id="id" value="viewer-1" placeholder="identity"/>
+    <button id="connect">Connect</button>
+    <button id="disconnect">Disconnect</button>
+  </div>
+
+  <div class="row">
+    <input id="chat" placeholder="nhập chat..." style="flex:1; min-width:260px"/>
+    <button id="send">Send chat</button>
+  </div>
+
+  <div class="log" id="log"></div>
+</div>
+
+<script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script>
+let room;
+const logEl = document.getElementById("log");
+const v = document.getElementById("v");
+const a = document.getElementById("a");
+function log(s){ logEl.textContent += s + "\n"; logEl.scrollTop = logEl.scrollHeight; }
+
+document.getElementById("connect").onclick = async () => {
+  const roomName = document.getElementById("room").value.trim();
+  const identity = document.getElementById("id").value.trim();
+
+  const r = await fetch(`/token?identity=${encodeURIComponent(identity)}&room=${encodeURIComponent(roomName)}`);
+  const {token, url} = await r.json();
+
+  room = new LivekitClient.Room({ adaptiveStream:true, dynacast:true });
+
+  room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
+    log(`TrackSubscribed from ${participant.identity}: kind=${track.kind}`);
+    if (track.kind === "video") track.attach(v);
+    if (track.kind === "audio") track.attach(a);
+  });
+
+  room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
+    log(`TrackUnsubscribed from ${participant.identity}: kind=${track.kind}`);
+  });
+
+  room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant) => {
+    const text = new TextDecoder().decode(payload);
+    log(`DATA from ${participant?.identity}: ${text}`);
+  });
+
+  await room.connect(url, token);
+  log("Connected.");
+};
+
+document.getElementById("disconnect").onclick = async () => {
+  if (room) {
+    await room.disconnect();
+    log("Disconnected.");
+  }
+};
+
+document.getElementById("send").onclick = async () => {
+  if (!room) return log("Not connected");
+  const text = document.getElementById("chat").value.trim();
+  if (!text) return;
+  const msg = JSON.stringify({type:"chat", text});
+  await room.localParticipant.publishData(new TextEncoder().encode(msg), {reliable:true});
+  log("Sent chat: " + text);
+};
+</script>
+</body>
+</html>
