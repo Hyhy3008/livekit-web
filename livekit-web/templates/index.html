@@ -33,7 +33,7 @@
     /* ============= 2-COLUMN LAYOUT ============= */
     .main-grid {
       display: grid;
-      grid-template-columns: 1fr 400px; /* Video | Chat */
+      grid-template-columns: 1fr 400px;
       gap: 20px;
       margin-bottom: 20px;
     }
@@ -49,7 +49,7 @@
     .video-wrapper {
       position: relative;
       width: 100%;
-      max-width: 640px; /* ✅ Thu nhỏ video */
+      max-width: 640px;
       margin: 0 auto;
       background: #000;
       border-radius: 12px;
@@ -80,7 +80,6 @@
 
     .video-status.disconnected { color: #ef4444; }
 
-    /* Connection controls */
     .connection-controls {
       margin-top: 16px;
       display: grid;
@@ -95,7 +94,7 @@
       border: 1px solid #334155;
       display: flex;
       flex-direction: column;
-      height: 600px; /* Fixed height */
+      height: 600px;
     }
 
     .chat-header {
@@ -172,7 +171,6 @@
       line-height: 1.5;
     }
 
-    /* Chat input */
     .chat-input-wrapper {
       padding: 16px;
       border-top: 1px solid #334155;
@@ -238,7 +236,7 @@
       min-width: 0;
     }
 
-    /* ============= LOG PANEL (bottom) ============= */
+    /* ============= LOG PANEL ============= */
     .log-panel {
       background: #1e293b;
       border-radius: 16px;
@@ -277,7 +275,7 @@
     /* ============= RESPONSIVE ============= */
     @media (max-width: 1024px) {
       .main-grid {
-        grid-template-columns: 1fr; /* Stack on mobile */
+        grid-template-columns: 1fr;
       }
 
       .chat-panel {
@@ -359,8 +357,14 @@
   <div class="tag">Server: {{ livekit_url }}</div>
 </div>
 
-<script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
+<!-- ✅ FIX: Load LiveKit SDK với version cụ thể -->
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.0.8/dist/livekit-client.umd.min.js"></script>
+
 <script>
+// ✅ Debug: Check if LiveKit loaded
+console.log('LiveKit loaded:', typeof window.LivekitClient !== 'undefined');
+console.log('Available:', window.LivekitClient);
+
 let room;
 const logEl = document.getElementById("log");
 const statusEl = document.getElementById("status");
@@ -371,6 +375,12 @@ const chatInput = document.getElementById("chat");
 const sendBtn = document.getElementById("send");
 const connectBtn = document.getElementById("connect");
 const disconnectBtn = document.getElementById("disconnect");
+
+// ✅ Check SDK loaded
+if (typeof LivekitClient === 'undefined') {
+  alert('❌ LiveKit SDK failed to load! Check internet connection.');
+  log('❌ LiveKit SDK not loaded');
+}
 
 // ============= LOGGING =============
 function log(s) {
@@ -411,6 +421,12 @@ function addSystemMessage(text) {
 
 // ============= CONNECTION =============
 connectBtn.onclick = async () => {
+  // ✅ Check SDK availability
+  if (typeof LivekitClient === 'undefined') {
+    alert('LiveKit SDK not loaded! Please refresh the page.');
+    return;
+  }
+
   const roomName = document.getElementById("room").value.trim();
   const identity = document.getElementById("id").value.trim();
 
@@ -424,8 +440,12 @@ connectBtn.onclick = async () => {
 
   try {
     const r = await fetch(`/token?identity=${encodeURIComponent(identity)}&room=${encodeURIComponent(roomName)}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    
     const {token, url} = await r.json();
+    log(`Token received, connecting to: ${url}`);
 
+    // ✅ Use LivekitClient namespace
     room = new LivekitClient.Room({ 
       adaptiveStream: true, 
       dynacast: true 
@@ -433,10 +453,10 @@ connectBtn.onclick = async () => {
 
     // Track subscribed
     room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
-      log(`TrackSubscribed from ${participant.identity}: ${track.kind}`);
+      log(`✅ Track: ${track.kind} from ${participant.identity}`);
       if (track.kind === "video") {
         track.attach(v);
-        v.muted = true; // Ensure video is muted to allow autoplay
+        v.muted = true;
       }
       if (track.kind === "audio") {
         track.attach(a);
@@ -445,13 +465,13 @@ connectBtn.onclick = async () => {
 
     // Track unsubscribed
     room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
-      log(`TrackUnsubscribed from ${participant.identity}: ${track.kind}`);
+      log(`❌ Unsubscribed: ${track.kind}`);
     });
 
     // Data received
     room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant) => {
       const text = new TextDecoder().decode(payload);
-      log(`DATA: ${text}`);
+      log(`📩 DATA: ${text.substring(0, 100)}`);
       
       try {
         const data = JSON.parse(text);
@@ -464,10 +484,21 @@ connectBtn.onclick = async () => {
           addSystemMessage(`⚡ Latency: ${data.total}s (render: ${data.render}s)`);
         } else if (data.type === "error") {
           addSystemMessage(`❌ Error: ${data.text}`);
+        } else if (data.type === "prebuffer_progress") {
+          addSystemMessage(`⏳ Buffering: ${data.have}/${data.need} frames (${data.t}s)`);
         }
       } catch (e) {
-        // Not JSON, ignore
+        // Not JSON
       }
+    });
+
+    // Disconnected
+    room.on(LivekitClient.RoomEvent.Disconnected, () => {
+      log('Disconnected from room');
+      statusEl.textContent = "Disconnected";
+      statusEl.className = "video-status disconnected";
+      connectBtn.disabled = false;
+      disconnectBtn.disabled = true;
     });
 
     // Connect
@@ -475,7 +506,7 @@ connectBtn.onclick = async () => {
     log("✅ Connected successfully!");
     statusEl.textContent = "Connected";
     statusEl.className = "video-status";
-    addSystemMessage("✅ Connected successfully!");
+    addSystemMessage("✅ Connected! Start chatting with the avatar.");
     
     connectBtn.disabled = true;
     disconnectBtn.disabled = false;
@@ -483,6 +514,7 @@ connectBtn.onclick = async () => {
   } catch (error) {
     log(`❌ Connection failed: ${error.message}`);
     addSystemMessage(`❌ Connection failed: ${error.message}`);
+    console.error('Connection error:', error);
   }
 };
 
@@ -501,7 +533,7 @@ disconnectBtn.onclick = async () => {
 
 // ============= SEND CHAT =============
 async function sendChat() {
-  if (!room) {
+  if (!room || room.state !== LivekitClient.RoomState.Connected) {
     alert("Chưa kết nối! Bấm Connect trước.");
     return;
   }
@@ -510,11 +542,20 @@ async function sendChat() {
   if (!text) return;
   
   const msg = JSON.stringify({type: "chat", text});
-  await room.localParticipant.publishData(new TextEncoder().encode(msg), {reliable: true});
   
-  log(`Sent chat: ${text}`);
-  addMessage("You", text, "user");
-  chatInput.value = "";
+  try {
+    await room.localParticipant.publishData(
+      new TextEncoder().encode(msg), 
+      { reliable: true }
+    );
+    
+    log(`Sent: ${text}`);
+    addMessage("You", text, "user");
+    chatInput.value = "";
+  } catch (error) {
+    log(`❌ Send failed: ${error.message}`);
+    alert('Failed to send message');
+  }
 }
 
 sendBtn.onclick = sendChat;
@@ -531,6 +572,9 @@ disconnectBtn.disabled = true;
 
 // Welcome message
 addSystemMessage("👋 Welcome! Connect to start chatting with AI Avatar.");
+
+// Log SDK version
+log(`LiveKit SDK loaded: ${typeof LivekitClient !== 'undefined' ? 'OK' : 'FAILED'}`);
 </script>
 </body>
 </html>
