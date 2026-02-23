@@ -30,7 +30,6 @@
       background-clip: text;
     }
 
-    /* ============= 2-COLUMN LAYOUT ============= */
     .main-grid {
       display: grid;
       grid-template-columns: 1fr 400px;
@@ -38,7 +37,6 @@
       margin-bottom: 20px;
     }
 
-    /* ============= LEFT: VIDEO PANEL ============= */
     .video-panel {
       background: #1e293b;
       border-radius: 16px;
@@ -87,7 +85,6 @@
       gap: 10px;
     }
 
-    /* ============= RIGHT: CHAT PANEL ============= */
     .chat-panel {
       background: #1e293b;
       border-radius: 16px;
@@ -178,7 +175,6 @@
       gap: 10px;
     }
 
-    /* ============= FORM CONTROLS ============= */
     input {
       padding: 10px 14px;
       border-radius: 10px;
@@ -207,13 +203,13 @@
       font-size: 14px;
     }
 
-    button:hover {
+    button:hover:not(:disabled) {
       background: #2563eb;
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
     }
 
-    button:active {
+    button:active:not(:disabled) {
       transform: translateY(0);
     }
 
@@ -221,14 +217,13 @@
       background: #475569;
     }
 
-    button.secondary:hover {
+    button.secondary:hover:not(:disabled) {
       background: #64748b;
     }
 
     button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
-      transform: none;
     }
 
     .chat-input {
@@ -236,7 +231,6 @@
       min-width: 0;
     }
 
-    /* ============= LOG PANEL ============= */
     .log-panel {
       background: #1e293b;
       border-radius: 16px;
@@ -272,7 +266,35 @@
       margin-top: 16px;
     }
 
-    /* ============= RESPONSIVE ============= */
+    /* ✅ Sending indicator */
+    .sending-indicator {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #334155;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    .sending-indicator.active {
+      display: flex;
+    }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #475569;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     @media (max-width: 1024px) {
       .main-grid {
         grid-template-columns: 1fr;
@@ -289,24 +311,11 @@
 
     @media (max-width: 640px) {
       body { padding: 12px; }
-      
       h1 { font-size: 22px; margin-bottom: 16px; }
-      
-      .video-panel, .chat-panel, .log-panel {
-        padding: 12px;
-      }
-
-      .chat-panel {
-        height: 400px;
-      }
-
-      .connection-controls {
-        grid-template-columns: 1fr;
-      }
-
-      .message {
-        max-width: 90%;
-      }
+      .video-panel, .chat-panel, .log-panel { padding: 12px; }
+      .chat-panel { height: 400px; }
+      .connection-controls { grid-template-columns: 1fr; }
+      .message { max-width: 90%; }
     }
   </style>
 </head>
@@ -315,7 +324,6 @@
   <h1>🤖 AI Avatar Chat</h1>
 
   <div class="main-grid">
-    <!-- ============= LEFT: VIDEO ============= -->
     <div class="video-panel">
       <div class="video-wrapper">
         <video id="v" autoplay playsinline muted></video>
@@ -331,7 +339,6 @@
       </div>
     </div>
 
-    <!-- ============= RIGHT: CHAT ============= -->
     <div class="chat-panel">
       <div class="chat-header">💬 Chat</div>
       <div class="chat-messages" id="messages"></div>
@@ -340,15 +347,19 @@
           type="text" 
           id="chat" 
           class="chat-input" 
-          placeholder="Nhập tin nhắn..."
+          placeholder="Nhập tin nhắn... (Enter để gửi)"
           autocomplete="off"
         />
         <button id="send">Send</button>
       </div>
+      <!-- ✅ Sending indicator -->
+      <div class="sending-indicator" id="sending">
+        <div class="spinner"></div>
+        <span>Sending...</span>
+      </div>
     </div>
   </div>
 
-  <!-- ============= BOTTOM: DEBUG LOG ============= -->
   <div class="log-panel">
     <div class="log-header">🔧 Debug Log</div>
     <div class="log-content" id="log"></div>
@@ -357,15 +368,12 @@
   <div class="tag">Server: {{ livekit_url }}</div>
 </div>
 
-<!-- ✅ FIX: Load LiveKit SDK với version cụ thể -->
 <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.0.8/dist/livekit-client.umd.min.js"></script>
 
 <script>
-// ✅ Debug: Check if LiveKit loaded
-console.log('LiveKit loaded:', typeof window.LivekitClient !== 'undefined');
-console.log('Available:', window.LivekitClient);
+let room = null;
+let isConnected = false;
 
-let room;
 const logEl = document.getElementById("log");
 const statusEl = document.getElementById("status");
 const messagesEl = document.getElementById("messages");
@@ -375,18 +383,14 @@ const chatInput = document.getElementById("chat");
 const sendBtn = document.getElementById("send");
 const connectBtn = document.getElementById("connect");
 const disconnectBtn = document.getElementById("disconnect");
-
-// ✅ Check SDK loaded
-if (typeof LivekitClient === 'undefined') {
-  alert('❌ LiveKit SDK failed to load! Check internet connection.');
-  log('❌ LiveKit SDK not loaded');
-}
+const sendingIndicator = document.getElementById("sending");
 
 // ============= LOGGING =============
 function log(s) {
   const timestamp = new Date().toLocaleTimeString();
   logEl.textContent += `[${timestamp}] ${s}\n`;
   logEl.scrollTop = logEl.scrollHeight;
+  console.log(s); // ✅ Console log for debugging
 }
 
 // ============= CHAT UI =============
@@ -421,9 +425,9 @@ function addSystemMessage(text) {
 
 // ============= CONNECTION =============
 connectBtn.onclick = async () => {
-  // ✅ Check SDK availability
   if (typeof LivekitClient === 'undefined') {
     alert('LiveKit SDK not loaded! Please refresh the page.');
+    log('❌ SDK not loaded');
     return;
   }
 
@@ -435,7 +439,7 @@ connectBtn.onclick = async () => {
     return;
   }
 
-  log(`Connecting to room: ${roomName} as ${identity}...`);
+  log(`Connecting to: ${roomName} as ${identity}`);
   addSystemMessage(`Connecting to ${roomName}...`);
 
   try {
@@ -443,15 +447,13 @@ connectBtn.onclick = async () => {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     
     const {token, url} = await r.json();
-    log(`Token received, connecting to: ${url}`);
+    log(`Token OK, connecting to: ${url}`);
 
-    // ✅ Use LivekitClient namespace
     room = new LivekitClient.Room({ 
       adaptiveStream: true, 
       dynacast: true 
     });
 
-    // Track subscribed
     room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
       log(`✅ Track: ${track.kind} from ${participant.identity}`);
       if (track.kind === "video") {
@@ -463,12 +465,6 @@ connectBtn.onclick = async () => {
       }
     });
 
-    // Track unsubscribed
-    room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
-      log(`❌ Unsubscribed: ${track.kind}`);
-    });
-
-    // Data received
     room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant) => {
       const text = new TextDecoder().decode(payload);
       log(`📩 DATA: ${text.substring(0, 100)}`);
@@ -485,42 +481,54 @@ connectBtn.onclick = async () => {
         } else if (data.type === "error") {
           addSystemMessage(`❌ Error: ${data.text}`);
         } else if (data.type === "prebuffer_progress") {
-          addSystemMessage(`⏳ Buffering: ${data.have}/${data.need} frames (${data.t}s)`);
+          addSystemMessage(`⏳ Buffering: ${data.have}/${data.need} frames`);
         }
       } catch (e) {
         // Not JSON
       }
     });
 
-    // Disconnected
     room.on(LivekitClient.RoomEvent.Disconnected, () => {
-      log('Disconnected from room');
+      log('❌ Disconnected');
+      isConnected = false;
       statusEl.textContent = "Disconnected";
       statusEl.className = "video-status disconnected";
       connectBtn.disabled = false;
       disconnectBtn.disabled = true;
+      sendBtn.disabled = true;
     });
 
-    // Connect
+    room.on(LivekitClient.RoomEvent.Connected, () => {
+      log('✅ Room connected event');
+      isConnected = true;
+      sendBtn.disabled = false;
+    });
+
     await room.connect(url, token);
-    log("✅ Connected successfully!");
+    log("✅ Connected!");
+    isConnected = true;
     statusEl.textContent = "Connected";
     statusEl.className = "video-status";
-    addSystemMessage("✅ Connected! Start chatting with the avatar.");
+    addSystemMessage("✅ Connected! Start chatting.");
     
     connectBtn.disabled = true;
     disconnectBtn.disabled = false;
+    sendBtn.disabled = false;
+    chatInput.focus();
     
   } catch (error) {
-    log(`❌ Connection failed: ${error.message}`);
-    addSystemMessage(`❌ Connection failed: ${error.message}`);
-    console.error('Connection error:', error);
+    log(`❌ Failed: ${error.message}`);
+    addSystemMessage(`❌ Failed: ${error.message}`);
+    console.error(error);
+    isConnected = false;
   }
 };
 
 disconnectBtn.onclick = async () => {
   if (room) {
     await room.disconnect();
+    room = null;
+    isConnected = false;
     log("Disconnected");
     statusEl.textContent = "Disconnected";
     statusEl.className = "video-status disconnected";
@@ -528,53 +536,90 @@ disconnectBtn.onclick = async () => {
     
     connectBtn.disabled = false;
     disconnectBtn.disabled = true;
+    sendBtn.disabled = true;
   }
 };
 
-// ============= SEND CHAT =============
+// ============= ✅ SEND CHAT (FIXED) =============
 async function sendChat() {
-  if (!room || room.state !== LivekitClient.RoomState.Connected) {
+  log('sendChat() called'); // Debug
+  
+  // ✅ Simple check
+  if (!room) {
+    log('❌ No room object');
     alert("Chưa kết nối! Bấm Connect trước.");
+    return;
+  }
+
+  if (!isConnected) {
+    log('❌ Not connected');
+    alert("Đang kết nối... vui lòng đợi.");
     return;
   }
   
   const text = chatInput.value.trim();
-  if (!text) return;
+  if (!text) {
+    log('❌ Empty text');
+    return;
+  }
+
+  log(`Attempting to send: "${text}"`);
   
-  const msg = JSON.stringify({type: "chat", text});
+  // Show sending indicator
+  sendingIndicator.classList.add('active');
+  sendBtn.disabled = true;
   
   try {
-    await room.localParticipant.publishData(
-      new TextEncoder().encode(msg), 
-      { reliable: true }
-    );
+    const msg = JSON.stringify({type: "chat", text});
+    const encoded = new TextEncoder().encode(msg);
     
-    log(`Sent: ${text}`);
+    log(`Publishing data: ${msg.substring(0, 50)}...`);
+    
+    await room.localParticipant.publishData(encoded, { 
+      reliable: true,
+      destinationIdentities: [] // Broadcast to all
+    });
+    
+    log(`✅ Sent successfully`);
     addMessage("You", text, "user");
     chatInput.value = "";
+    chatInput.focus();
+    
   } catch (error) {
-    log(`❌ Send failed: ${error.message}`);
-    alert('Failed to send message');
+    log(`❌ Send error: ${error.message}`);
+    console.error('Send error:', error);
+    alert(`Failed to send: ${error.message}`);
+  } finally {
+    sendingIndicator.classList.remove('active');
+    sendBtn.disabled = false;
   }
 }
 
-sendBtn.onclick = sendChat;
+// ✅ Button click
+sendBtn.onclick = () => {
+  log('Send button clicked');
+  sendChat();
+};
 
-// Enter to send
-chatInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
+// ✅ Enter key
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault(); // Prevent form submission
+    log('Enter pressed');
     sendChat();
   }
 });
 
 // Initial state
 disconnectBtn.disabled = true;
+sendBtn.disabled = true;
 
-// Welcome message
-addSystemMessage("👋 Welcome! Connect to start chatting with AI Avatar.");
+// Welcome
+addSystemMessage("👋 Welcome! Enter room name and click Connect.");
+log('Page loaded, SDK: ' + (typeof LivekitClient !== 'undefined' ? 'OK' : 'FAILED'));
 
-// Log SDK version
-log(`LiveKit SDK loaded: ${typeof LivekitClient !== 'undefined' ? 'OK' : 'FAILED'}`);
+// ✅ Focus on room input
+document.getElementById('room').focus();
 </script>
 </body>
 </html>
