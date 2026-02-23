@@ -3,117 +3,534 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>LiveKit Cloud Viewer</title>
+  <title>AI Avatar Chat</title>
   <style>
-    body { font-family: system-ui; margin:0; padding:16px; background:#0b0f19; color:#e8eefc; }
-    .wrap { max-width: 980px; margin: 0 auto; }
-    .row { display:flex; gap:10px; flex-wrap:wrap; margin:10px 0; align-items:center; }
-    input, button { padding:10px 12px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#e8eefc; }
-    button { background:#2563eb; border:none; cursor:pointer; }
-    button:hover { background:#1d4ed8; }
-    video { width:100%; max-width:900px; background:#111827; border-radius:12px; border:1px solid #263248; }
-    pre { white-space:pre-wrap; background:#0f172a; border:1px solid #334155; padding:10px; border-radius:12px; min-height:170px; }
-    .hint { opacity:0.8; font-size:13px; margin-top:8px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 24px;
+      font-size: 28px;
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ============= 2-COLUMN LAYOUT ============= */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 400px; /* Video | Chat */
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    /* ============= LEFT: VIDEO PANEL ============= */
+    .video-panel {
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 20px;
+      border: 1px solid #334155;
+    }
+
+    .video-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 640px; /* ✅ Thu nhỏ video */
+      margin: 0 auto;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    }
+
+    video {
+      width: 100%;
+      height: auto;
+      display: block;
+      aspect-ratio: 4/3;
+    }
+
+    audio { display: none; }
+
+    .video-status {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(0,0,0,0.7);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #10b981;
+      font-weight: 600;
+    }
+
+    .video-status.disconnected { color: #ef4444; }
+
+    /* Connection controls */
+    .connection-controls {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr auto auto;
+      gap: 10px;
+    }
+
+    /* ============= RIGHT: CHAT PANEL ============= */
+    .chat-panel {
+      background: #1e293b;
+      border-radius: 16px;
+      border: 1px solid #334155;
+      display: flex;
+      flex-direction: column;
+      height: 600px; /* Fixed height */
+    }
+
+    .chat-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #334155;
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .chat-messages::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .chat-messages::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+
+    .chat-messages::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 3px;
+    }
+
+    .message {
+      padding: 10px 14px;
+      border-radius: 12px;
+      max-width: 85%;
+      word-wrap: break-word;
+      animation: slideIn 0.2s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: #3b82f6;
+      color: white;
+    }
+
+    .message.bot {
+      align-self: flex-start;
+      background: #334155;
+      color: #e2e8f0;
+    }
+
+    .message.system {
+      align-self: center;
+      background: #0f172a;
+      color: #94a3b8;
+      font-size: 13px;
+      border: 1px solid #334155;
+    }
+
+    .message-sender {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    .message-text {
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* Chat input */
+    .chat-input-wrapper {
+      padding: 16px;
+      border-top: 1px solid #334155;
+      display: flex;
+      gap: 10px;
+    }
+
+    /* ============= FORM CONTROLS ============= */
+    input {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    button {
+      padding: 10px 18px;
+      border-radius: 10px;
+      border: none;
+      background: #3b82f6;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 14px;
+    }
+
+    button:hover {
+      background: #2563eb;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button.secondary {
+      background: #475569;
+    }
+
+    button.secondary:hover {
+      background: #64748b;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .chat-input {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* ============= LOG PANEL (bottom) ============= */
+    .log-panel {
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 16px 20px;
+      border: 1px solid #334155;
+    }
+
+    .log-header {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      opacity: 0.8;
+    }
+
+    .log-content {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 12px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 12px;
+      max-height: 150px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      color: #94a3b8;
+    }
+
+    .tag {
+      text-align: center;
+      opacity: 0.6;
+      font-size: 12px;
+      margin-top: 16px;
+    }
+
+    /* ============= RESPONSIVE ============= */
+    @media (max-width: 1024px) {
+      .main-grid {
+        grid-template-columns: 1fr; /* Stack on mobile */
+      }
+
+      .chat-panel {
+        height: 500px;
+      }
+
+      .connection-controls {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 12px; }
+      
+      h1 { font-size: 22px; margin-bottom: 16px; }
+      
+      .video-panel, .chat-panel, .log-panel {
+        padding: 12px;
+      }
+
+      .chat-panel {
+        height: 400px;
+      }
+
+      .connection-controls {
+        grid-template-columns: 1fr;
+      }
+
+      .message {
+        max-width: 90%;
+      }
+    }
   </style>
 </head>
 <body>
-<div class="wrap">
-  <h2>LiveKit Cloud Viewer</h2>
+<div class="container">
+  <h1>🤖 AI Avatar Chat</h1>
 
-  <video id="v" autoplay playsinline muted></video>
-  <audio id="a" autoplay></audio>
+  <div class="main-grid">
+    <!-- ============= LEFT: VIDEO ============= -->
+    <div class="video-panel">
+      <div class="video-wrapper">
+        <video id="v" autoplay playsinline muted></video>
+        <div class="video-status disconnected" id="status">Disconnected</div>
+      </div>
+      <audio id="a" autoplay></audio>
 
-  <div class="row">
-    <input id="room" value="testroom" placeholder="room name"/>
-    <input id="id" value="viewer-1" placeholder="identity"/>
-    <button id="connect">Connect</button>
+      <div class="connection-controls">
+        <input id="room" value="testroom" placeholder="Room name"/>
+        <input id="id" value="viewer-1" placeholder="Your name"/>
+        <button id="connect">Connect</button>
+        <button id="disconnect" class="secondary">Disconnect</button>
+      </div>
+    </div>
+
+    <!-- ============= RIGHT: CHAT ============= -->
+    <div class="chat-panel">
+      <div class="chat-header">💬 Chat</div>
+      <div class="chat-messages" id="messages"></div>
+      <div class="chat-input-wrapper">
+        <input 
+          type="text" 
+          id="chat" 
+          class="chat-input" 
+          placeholder="Nhập tin nhắn..."
+          autocomplete="off"
+        />
+        <button id="send">Send</button>
+      </div>
+    </div>
   </div>
 
-  <div class="row">
-    <input id="chat" placeholder="nhập chat..." style="flex:1; min-width:260px"/>
-    <button id="send">Send chat</button>
+  <!-- ============= BOTTOM: DEBUG LOG ============= -->
+  <div class="log-panel">
+    <div class="log-header">🔧 Debug Log</div>
+    <div class="log-content" id="log"></div>
   </div>
 
-  <pre id="log"></pre>
-  <div class="hint">Nếu lỗi, mở F12 → Console để xem log.</div>
+  <div class="tag">Server: {{ livekit_url }}</div>
 </div>
 
-<!-- IMPORTANT:
-     Use ESM module import. This avoids the "LiveKitClient is not defined" issue. -->
-<script type="module">
-  // Prefer unpkg; if blocked, use jsdelivr (comment/uncomment accordingly)
-  import { Room, RoomEvent } from "https://unpkg.com/livekit-client/dist/livekit-client.esm.mjs";
-  // import { Room, RoomEvent } from "https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.esm.mjs";
+<script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script>
+let room;
+const logEl = document.getElementById("log");
+const statusEl = document.getElementById("status");
+const messagesEl = document.getElementById("messages");
+const v = document.getElementById("v");
+const a = document.getElementById("a");
+const chatInput = document.getElementById("chat");
+const sendBtn = document.getElementById("send");
+const connectBtn = document.getElementById("connect");
+const disconnectBtn = document.getElementById("disconnect");
 
-  let room = null;
+// ============= LOGGING =============
+function log(s) {
+  const timestamp = new Date().toLocaleTimeString();
+  logEl.textContent += `[${timestamp}] ${s}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
 
-  const logEl = document.getElementById("log");
-  const v = document.getElementById("v");
-  const a = document.getElementById("a");
+// ============= CHAT UI =============
+function addMessage(sender, text, type = 'user') {
+  const msg = document.createElement('div');
+  msg.className = `message ${type}`;
+  
+  const senderEl = document.createElement('div');
+  senderEl.className = 'message-sender';
+  senderEl.textContent = sender;
+  
+  const textEl = document.createElement('div');
+  textEl.className = 'message-text';
+  textEl.textContent = text;
+  
+  msg.appendChild(senderEl);
+  msg.appendChild(textEl);
+  messagesEl.appendChild(msg);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
 
-  function log(s) {
-    logEl.textContent += s + "\n";
-    logEl.scrollTop = logEl.scrollHeight;
+function addSystemMessage(text) {
+  const msg = document.createElement('div');
+  msg.className = 'message system';
+  const textEl = document.createElement('div');
+  textEl.className = 'message-text';
+  textEl.textContent = text;
+  msg.appendChild(textEl);
+  messagesEl.appendChild(msg);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+// ============= CONNECTION =============
+connectBtn.onclick = async () => {
+  const roomName = document.getElementById("room").value.trim();
+  const identity = document.getElementById("id").value.trim();
+
+  if (!roomName || !identity) {
+    alert("Vui lòng nhập room name và identity!");
+    return;
   }
 
-  document.getElementById("connect").onclick = async () => {
-    const roomName = document.getElementById("room").value.trim();
-    const identity = document.getElementById("id").value.trim();
+  log(`Connecting to room: ${roomName} as ${identity}...`);
+  addSystemMessage(`Connecting to ${roomName}...`);
 
-    try {
-      log("Requesting token...");
-      const r = await fetch(`/token?identity=${encodeURIComponent(identity)}&room=${encodeURIComponent(roomName)}`);
-      if (!r.ok) {
-        const t = await r.text();
-        throw new Error(`Token error ${r.status}: ${t.slice(0, 200)}`);
+  try {
+    const r = await fetch(`/token?identity=${encodeURIComponent(identity)}&room=${encodeURIComponent(roomName)}`);
+    const {token, url} = await r.json();
+
+    room = new LivekitClient.Room({ 
+      adaptiveStream: true, 
+      dynacast: true 
+    });
+
+    // Track subscribed
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
+      log(`TrackSubscribed from ${participant.identity}: ${track.kind}`);
+      if (track.kind === "video") {
+        track.attach(v);
+        v.muted = true; // Ensure video is muted to allow autoplay
       }
-      const { token, url } = await r.json();
+      if (track.kind === "audio") {
+        track.attach(a);
+      }
+    });
 
-      room = new Room({ adaptiveStream: true, dynacast: true });
+    // Track unsubscribed
+    room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
+      log(`TrackUnsubscribed from ${participant.identity}: ${track.kind}`);
+    });
 
-      room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
-        log(`TrackSubscribed from ${participant.identity}: kind=${track.kind}`);
-        if (track.kind === "video") {
-          track.attach(v);
-          v.play().catch(() => {});
+    // Data received
+    room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant) => {
+      const text = new TextDecoder().decode(payload);
+      log(`DATA: ${text}`);
+      
+      try {
+        const data = JSON.parse(text);
+        
+        if (data.type === "reply") {
+          addMessage("AI Avatar", data.text, "bot");
+        } else if (data.type === "status") {
+          addSystemMessage(`Status: ${data.text}`);
+        } else if (data.type === "latency") {
+          addSystemMessage(`⚡ Latency: ${data.total}s (render: ${data.render}s)`);
+        } else if (data.type === "error") {
+          addSystemMessage(`❌ Error: ${data.text}`);
         }
-        if (track.kind === "audio") {
-          track.attach(a);
-          a.play().catch(() => {});
-        }
-      });
+      } catch (e) {
+        // Not JSON, ignore
+      }
+    });
 
-      room.on(RoomEvent.DataReceived, (payload, participant) => {
-        const text = new TextDecoder().decode(payload);
-        log(`DATA from ${participant?.identity}: ${text}`);
-      });
+    // Connect
+    await room.connect(url, token);
+    log("✅ Connected successfully!");
+    statusEl.textContent = "Connected";
+    statusEl.className = "video-status";
+    addSystemMessage("✅ Connected successfully!");
+    
+    connectBtn.disabled = true;
+    disconnectBtn.disabled = false;
+    
+  } catch (error) {
+    log(`❌ Connection failed: ${error.message}`);
+    addSystemMessage(`❌ Connection failed: ${error.message}`);
+  }
+};
 
-      room.on(RoomEvent.Disconnected, () => {
-        log("Disconnected.");
-      });
+disconnectBtn.onclick = async () => {
+  if (room) {
+    await room.disconnect();
+    log("Disconnected");
+    statusEl.textContent = "Disconnected";
+    statusEl.className = "video-status disconnected";
+    addSystemMessage("Disconnected");
+    
+    connectBtn.disabled = false;
+    disconnectBtn.disabled = true;
+  }
+};
 
-      await room.connect(url, token);
-      log("✅ Connected OK.");
-    } catch (e) {
-      log("❌ CONNECT ERROR: " + (e?.message || e));
-      console.error(e);
-    }
-  };
+// ============= SEND CHAT =============
+async function sendChat() {
+  if (!room) {
+    alert("Chưa kết nối! Bấm Connect trước.");
+    return;
+  }
+  
+  const text = chatInput.value.trim();
+  if (!text) return;
+  
+  const msg = JSON.stringify({type: "chat", text});
+  await room.localParticipant.publishData(new TextEncoder().encode(msg), {reliable: true});
+  
+  log(`Sent chat: ${text}`);
+  addMessage("You", text, "user");
+  chatInput.value = "";
+}
 
-  document.getElementById("send").onclick = async () => {
-    if (!room) return log("Not connected");
-    const text = document.getElementById("chat").value.trim();
-    if (!text) return;
+sendBtn.onclick = sendChat;
 
-    try {
-      const msg = JSON.stringify({ type: "chat", text });
-      await room.localParticipant.publishData(new TextEncoder().encode(msg), { reliable: true });
-      log("Sent chat: " + text);
-    } catch (e) {
-      log("❌ SEND ERROR: " + (e?.message || e));
-      console.error(e);
-    }
-  };
+// Enter to send
+chatInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    sendChat();
+  }
+});
+
+// Initial state
+disconnectBtn.disabled = true;
+
+// Welcome message
+addSystemMessage("👋 Welcome! Connect to start chatting with AI Avatar.");
 </script>
 </body>
 </html>
